@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activity Data Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">Activity Data Dashboard</h1>
+      <div class="nav-links">
+        <button class="nav-btn active" onclick="showPage('home')">Home</button>
+        <button class="nav-btn" onclick="showPage('emergency')">Emergency List</button>
+        <button class="nav-btn" onclick="showPage('groups')">User Groups</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Home Page -->
+  <div id="home-page" class="page active">
+    <div class="container">
+      <div class="hero">
+        <h1>Activity Data Dashboard</h1>
+        <p>Monitor user activity patterns, emergency alerts, and detailed analytics with interactive visualizations and
+          clustering insights.</p>
+      </div>
+      
+      <!-- File Upload Section -->
+      <div class="upload-section">
+        <h2>Upload Data Files</h2>
+        <div class="upload-grid">
+          <div class="upload-item">
+            <label for="emergency-csv">Emergency List CSV:</label>
+            <input type="file" id="emergency-csv" accept=".csv" onchange="loadEmergencyCSV(event)">
+          </div>
+          <div class="upload-item">
+            <label for="clustered-csv">Clustered Users CSV:</label>
+            <input type="file" id="clustered-csv" accept=".csv" onchange="loadClusteredCSV(event)">
+          </div>
+          <div class="upload-item">
+            <label for="user-data-ipynb">User Data Notebook:</label>
+            <input type="file" id="user-data-ipynb" accept=".ipynb" onchange="loadUserDataIPYNB(event)">
+          </div>
+        </div>
+      </div>
+
+      <div class="cards-grid">
+        <div class="card emergency-card" onclick="showPage('emergency')">
+          <div class="card-icon">⚠️</div>
+          <h3>Emergency List</h3>
+          <p>View users flagged for emergency monitoring</p>
+        </div>
+
+        <div class="card groups-card" onclick="showPage('groups')">
+          <div class="card-icon">👥</div>
+          <h3>User Groups</h3>
+          <p>Explore clustered user activity patterns</p>
+        </div>
+
+        <div class="card analytics-card" onclick="showPage('analytics')">
+          <div class="card-icon">📊</div>
+          <h3>Analytics</h3>
+          <p>Detailed user activity analysis</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Emergency List Page -->
+  <div id="emergency-page" class="page">
+    <div class="container">
+      <div class="page-header">
+        <button class="back-btn" onclick="showPage('home')">← Back to Dashboard</button>
+        <h1>Emergency List</h1>
+      </div>
+
+      <div class="search-section">
+        <input type="text" id="emergency-search" placeholder="Search user ID..." onkeyup="filterEmergencyUsers()">
+        <span id="emergency-count">0 users</span>
+      </div>
+
+      <div class="table-container">
+        <table id="emergency-table">
+          <thead>
+            <tr>
+              <th>User ID</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="emergency-tbody">
+            <!-- Data will be populated here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Groups Page -->
+  <div id="groups-page" class="page">
+    <div class="container">
+      <div class="page-header">
+        <button class="back-btn" onclick="showPage('home')">← Back to Dashboard</button>
+        <h1>User Groups</h1>
+      </div>
+
+      <div class="groups-container">
+        <div class="group-section">
+          <h2>Mostly Active Users</h2>
+          <div class="table-container">
+            <table id="active-table">
+              <thead>
+                <tr>
+                  <th>User ID</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="active-tbody">
+                <!-- Data will be populated here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="group-section">
+          <h2>Mostly Sedentary Users</h2>
+          <div class="table-container">
+            <table id="sedentary-table">
+              <thead>
+                <tr>
+                  <th>User ID</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="sedentary-tbody">
+                <!-- Data will be populated here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Details Page -->
+  <div id="user-details-page" class="page">
+    <div class="container">
+      <div class="page-header">
+        <button class="back-btn" onclick="goBack()">← Back</button>
+        <h1 id="user-details-title">User Details</h1>
+      </div>
+
+      <div class="charts-container">
+        <div class="chart-section">
+          <h3>Activity Distribution</h3>
+          <canvas id="activity-pie-chart"></canvas>
+        </div>
+
+        <div class="chart-section">
+          <h3>Heart Rate Variability (HRV)</h3>
+          <canvas id="hrv-line-chart"></canvas>
+        </div>
+
+        <div class="chart-section">
+          <h3>Weekly Activity Score</h3>
+          <canvas id="activity-bar-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+
+</html>
