@@ -60,27 +60,52 @@ function loadEmergencyCSV(event) {
 function loadClusteredCSV(event) {
     const file = event.target.files[0];
     if (!file) return;
-    
+
     Papa.parse(file, {
         header: true,
+        skipEmptyLines: true,
         complete: function(results) {
-            // Reset clustered data
             clusteredData = { active: [], sedentary: [] };
-            
-            // Process each row based on the Group column
-            results.data.forEach(row => {
-                const userId = row.user_id || row.id || row.ID || Object.values(row)[0];
-                const group = row.Group || row.group || row.GROUP; // Look specifically for Group column
-                
-                if (userId && group) {
-                    if (group.toString().toLowerCase().includes('active') || group.toString() === '1') {
+
+            const headers = results.meta.fields;
+            const userCol = headers.includes('user_id') ? 'user_id' :
+                            headers.includes('User ID') ? 'User ID' :
+                            headers.includes('Id') ? 'Id' :
+                            headers.includes('ID') ? 'ID' :
+                            headers.includes('id') ? 'id' : null;
+
+            const groupCol = headers.includes('Group') ? 'Group' :
+                             headers.includes('group') ? 'group' :
+                             headers.includes('GROUP') ? 'GROUP' : null;
+
+            if (!userCol || !groupCol) {
+                console.error("Missing required columns in clustered_users.csv");
+                alert("CSV must contain 'Id' and 'group' columns (or similar).");
+                return;
+            }
+
+            if (!Array.isArray(results.data) || results.data.length === 0) {
+                alert("Clustered CSV file is empty or incorrectly formatted.");
+                return;
+            }
+
+            const processedClusterData = results.data.filter(row =>
+                row[userCol]?.trim() && row[groupCol] !== undefined && row[groupCol] !== null
+            );
+
+            processedClusterData.forEach(row => {
+                const userId = row[userCol]?.trim();
+                const groupStr = row[groupCol]?.toString().toLowerCase();
+
+                if (groupStr && userId) {
+                    if (groupStr.includes('active') || groupStr === '1') {
                         clusteredData.active.push(userId);
-                    } else if (group.toString().toLowerCase().includes('sedentary') || group.toString() === '0') {
+                    } else if (groupStr.includes('sedentary') || groupStr === '0') {
                         clusteredData.sedentary.push(userId);
                     }
                 }
             });
-            
+
             console.log('Clustered data loaded:', clusteredData);
             populateGroupsTables();
         },
@@ -153,61 +178,63 @@ function parseNotebookData(notebook) {
 }
 
 function parseTextOutput(textData) {
-    // Convert array format to string if needed
     const text = Array.isArray(textData) ? textData.join('') : textData;
-    
-    // Try to parse user data patterns
     const lines = text.split('\n');
+
     lines.forEach(line => {
-        // Look for user ID patterns and associated data
-        const userIdMatch = line.match(/(\d{9})/); // 9-digit user IDs
-        if (userIdMatch) {
-            const userId = userIdMatch[1];
-            
-            // Initialize user data if not exists
-            if (!userDetailedData[userId]) {
-                userDetailedData[userId] = {
-                    activityData: { sedentary: 0, physical: 0 },
-                    hrvData: [],
-                    activityScoreData: []
-                };
+        const userIdMatch = line.match(/(\d{9})/); // 9-digit user ID
+        if (!userIdMatch) return;
+
+        const userId = userIdMatch[1];
+
+        // Initialize if needed
+        if (!userDetailedData[userId]) {
+            userDetailedData[userId] = {
+                activityData: { sedentary: 0, physical: 0 },
+                hrvData: [],
+                activityScoreData: []
+            };
+        }
+
+        // Parse activity levels
+        const sedentaryMatch = line.match(/sedentary[:\s]*(\d+\.?\d*)/i);
+        const physicalMatch = line.match(/physical[:\s]*(\d+\.?\d*)/i);
+        if (sedentaryMatch) userDetailedData[userId].activityData.sedentary = parseFloat(sedentaryMatch[1]);
+        if (physicalMatch) userDetailedData[userId].activityData.physical = parseFloat(physicalMatch[1]);
+
+        // Extract week (explicitly)
+        const weekMatch = line.match(/week[:\s]*(\d+)/i);
+        const weekNum = weekMatch ? parseInt(weekMatch[1]) : null;
+        const weekLabel = weekNum ? `Week ${weekNum}` : null;
+
+        // Parse HRV
+        const hrvMatch = line.match(/hrv[:\s]*(\d+\.?\d*)/i);
+        if (hrvMatch && weekLabel) {
+            const hrvValue = parseFloat(hrvMatch[1]);
+            const existingWeek = userDetailedData[userId].hrvData.find(entry => entry.week === weekLabel);
+            if (!existingWeek) {
+                userDetailedData[userId].hrvData.push({ week: weekLabel, hrv: hrvValue });
             }
-            
-            // Parse activity percentages
-            const sedentaryMatch = line.match(/sedentary[:\s]*(\d+\.?\d*)/i);
-            const physicalMatch = line.match(/physical[:\s]*(\d+\.?\d*)/i);
-            
-            if (sedentaryMatch) {
-                userDetailedData[userId].activityData.sedentary = parseFloat(sedentaryMatch[1]);
-            }
-            if (physicalMatch) {
-                userDetailedData[userId].activityData.physical = parseFloat(physicalMatch[1]);
-            }
-            
-            // Parse HRV data
-            const hrvMatch = line.match(/hrv[:\s]*(\d+\.?\d*)/i);
-            if (hrvMatch) {
-                const weekMatch = line.match(/week[:\s]*(\d+)/i);
-                const week = weekMatch ? weekMatch[1] : userDetailedData[userId].hrvData.length + 1;
-                userDetailedData[userId].hrvData.push({
-                    week: `Week ${week}`,
-                    hrv: parseFloat(hrvMatch[1])
-                });
-            }
-            
-            // Parse activity score
-            const scoreMatch = line.match(/activity_score[:\s]*(\d+\.?\d*)/i);
-            if (scoreMatch) {
-                const weekMatch = line.match(/week[:\s]*(\d+)/i);
-                const week = weekMatch ? weekMatch[1] : userDetailedData[userId].activityScoreData.length + 1;
-                userDetailedData[userId].activityScoreData.push({
-                    week: `Week ${week}`,
-                    score: parseFloat(scoreMatch[1])
-                });
+        }
+
+        // Parse activity score
+        const scoreMatch = line.match(/activity_score[:\s]*(\d+\.?\d*)/i);
+        if (scoreMatch && weekLabel) {
+            const scoreValue = parseFloat(scoreMatch[1]);
+            const existingWeek = userDetailedData[userId].activityScoreData.find(entry => entry.week === weekLabel);
+            if (!existingWeek) {
+                userDetailedData[userId].activityScoreData.push({ week: weekLabel, score: scoreValue });
             }
         }
     });
+
+    // Optionally sort weekly data
+    Object.values(userDetailedData).forEach(user => {
+        user.hrvData.sort((a, b) => parseInt(a.week.split(' ')[1]) - parseInt(b.week.split(' ')[1]));
+        user.activityScoreData.sort((a, b) => parseInt(a.week.split(' ')[1]) - parseInt(b.week.split(' ')[1]));
+    });
 }
+
 
 function parseJSONOutput(jsonData) {
     // Handle structured JSON data
@@ -338,10 +365,14 @@ function showUserDetails(userId) {
     // Generate or use real data for charts
     const userData = userDetailedData[userId] || generateMockUserData(userId);
     
-    // Create charts
+    // Limit data to last 4 weeks
+    const limitedHRVData = userData.hrvData.slice(-4); // Get last 4 entries
+    const limitedActivityScoreData = userData.activityScoreData.slice(-4);
+    
+    // Create charts with limited data
     createActivityPieChart(userData.activityData);
-    createHRVLineChart(userData.hrvData);
-    createActivityBarChart(userData.activityScoreData);
+    createHRVLineChart(limitedHRVData);
+    createActivityBarChart(limitedActivityScoreData);
 }
 
 function generateMockUserData(userId) {
@@ -369,103 +400,134 @@ let activityChart, hrvChart, activityScoreChart;
 
 function createActivityPieChart(data) {
     const ctx = document.getElementById('activity-pie-chart').getContext('2d');
-    
+
     if (activityChart) {
         activityChart.destroy();
     }
-    
+
     activityChart = new Chart(ctx, {
         type: 'pie',
         data: {
             labels: ['Sedentary', 'Physical'],
             datasets: [{
                 data: [data.sedentary, data.physical],
-                backgroundColor: ['#ef4444', '#22c55e'],
-                borderWidth: 2,
-                borderColor: '#fff'
+                backgroundColor: ['#ef4444', '#22c55e'], // Red and Green
+                borderColor: '#ffffff',
+                borderWidth: 2
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     position: 'bottom'
+                },
+                title: {
+                    display: true,
+                    text: 'Activity Breakdown'
                 }
             }
         }
     });
 }
 
-function createHRVLineChart(data) {
+function createHRVLineChart(hrvData) {
     const ctx = document.getElementById('hrv-line-chart').getContext('2d');
-    
+
     if (hrvChart) {
         hrvChart.destroy();
     }
-    
+
+    // Map week labels to 1-4 regardless of actual week numbers
+    const labels = hrvData.map((entry, index) => `Week ${index + 1}`);
+
     hrvChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: data.map(item => item.week),
+            labels: labels,  // Use the remapped labels
             datasets: [{
                 label: 'HRV',
-                data: data.map(item => item.hrv),
-                borderColor: '#22c55e',
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                borderWidth: 3,
-                fill: true,
-                tension: 0.4
+                data: hrvData.map(entry => entry.hrv),  // Keep original data values
+                fill: false,
+                borderColor: '#3b82f6',
+                backgroundColor: '#3b82f6',
+                tension: 0.3
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    display: false
+                    display: true
+                },
+                title: {
+                    display: true,
+                    text: 'Heart Rate Variability (HRV) Over Time'
                 }
             },
             scales: {
                 y: {
-                    beginAtZero: true
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'HRV'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Week'
+                    }
                 }
             }
         }
     });
 }
 
-function createActivityBarChart(data) {
+function createActivityBarChart(scoreData) {
     const ctx = document.getElementById('activity-bar-chart').getContext('2d');
-    
+
     if (activityScoreChart) {
         activityScoreChart.destroy();
     }
-    
+
+    // Map week labels to 1-4 regardless of actual week numbers
+    const labels = scoreData.map((entry, index) => `Week ${index + 1}`);
+
     activityScoreChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: data.map(item => item.week),
+            labels: labels,  // Use the remapped labels
             datasets: [{
                 label: 'Activity Score',
-                data: data.map(item => item.score),
-                backgroundColor: '#8b5cf6',
-                borderColor: '#7c3aed',
-                borderWidth: 1,
-                borderRadius: 4
+                data: scoreData.map(entry => entry.score),  // Keep original data values
+                backgroundColor: '#10b981'
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    display: false
+                    display: true
+                },
+                title: {
+                    display: true,
+                    text: 'Weekly Activity Score'
                 }
             },
             scales: {
                 y: {
-                    beginAtZero: true
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Score'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Week'
+                    }
                 }
             }
         }
